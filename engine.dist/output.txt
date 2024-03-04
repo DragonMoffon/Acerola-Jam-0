@@ -1,0 +1,2 @@
+hmmmm
+['optics.exe', '--test']

@@ -1,0 +1,6 @@
+pillow = 10.2.0
+pyglet >= 2.0.12
+pymunk = 6.6.0
+typing-extensions = 4.10.0
+pytiled-parser = 2.2.3
+Nuitka = 2.0.6
