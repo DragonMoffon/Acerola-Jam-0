@@ -10,12 +10,9 @@ See the following pull request for more information:
 """
 from arcade.experimental.clock.timer import Timer
 from arcade.experimental.clock.clock import Clock
-from arcade.experimental.clock.clock_window import View, Window
 
 
 __all__ = [
     "Timer",
-    "Clock",
-    "View",
-    "Window"
+    "Clock"
 ]

@@ -35,6 +35,7 @@ class Clock:
         self._frozen: bool = frozen
 
         self._elapsed_time: float = initial_elapsed_time
+        self._up_time: float = 0.0
         self._tick_count: int = initial_tick_count
 
         self._parent: Optional[Clock] = parent
@@ -46,11 +47,12 @@ class Clock:
 
     def tick(self, delta_time: float):
         self._tick_count += 1
+        self._up_time += delta_time
         if self._frozen:
             return
         self._delta_time_raw = delta_time
 
-        self._elapsed_time = self._delta_time_raw * self.tick_speed
+        self._elapsed_time += self._delta_time_raw * self.tick_speed
 
         for child in tuple(self._children):
             child.tick(self._delta_time_raw * self.tick_speed)
@@ -98,6 +100,14 @@ class Clock:
     @property
     def elapsed(self):
         return self._elapsed_time
+
+    @property
+    def up_time(self):
+        return self._up_time
+
+    @property
+    def average_raw_dt(self):
+        return self._up_time / self._tick_count
 
     @property
     def frozen(self):
