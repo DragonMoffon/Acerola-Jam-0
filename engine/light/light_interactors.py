@@ -5,7 +5,7 @@ from weakref import WeakSet
 from pyglet.math import Vec2
 from arcade import draw_line, draw_polygon_outline
 
-from engine.light.light_beam import LightBeam
+from engine.light.light_beam import LightBeam, LightEdge
 
 
 class LightInteractorManager:
@@ -155,43 +155,78 @@ class LightInteractor:
 
     def debug_draw(self):
         points = tuple(self.bounds_adjusted)
-        normals = tuple(self.normals_adjusted)
+
+        colour = (255 * self._components[0], 255 * self._components[1], 255 * self._components[2], 255)
 
         draw_line(self._position.x, self._position.y,
                   self._position.x + self._direction.x * 15,
                   self._position.y + self._direction.y * 15,
-                  (255, 255, 255, 255), 1)
+                  colour, 1)
 
-        draw_polygon_outline(points, (255, 255, 255, 255), 1)
-        for i in range(len(normals)):
-            p = points[i]
-            n = normals[i]
-
-            draw_line(
-                p.x, p.y,
-                p.x + n.x * 10,
-                p.y + n.y * 10,
-                (255, 0, 0, 255),
-                1
-            )
+        draw_polygon_outline(points, colour, 1)
 
 
 class LightFilter(LightInteractor):
 
-    def __init__(self, position: Vec2, direction: Vec2, width: float, height: float):
+    def __init__(self,
+                 position: Vec2,
+                 direction: Vec2,
+                 width: float,
+                 height: float,
+                 components: Tuple[bool, bool, bool] = (True, True, True)
+                 ):
         bounds = (
             Vec2(-width/2, -height/2),
             Vec2(-width/2, height/2),
             Vec2(width/2, height/2),
             Vec2(width/2, -height/2)
         )
-        super().__init__(position, direction, bounds)
+        super().__init__(position, direction, bounds, components)
 
     def calculate_interaction(self, beam: LightBeam, edge: Tuple[Vec2, Vec2, Vec2, "LightInteractor"]) -> Tuple[LightBeam, ...]:
-        if not any(a == b for a, b in zip(beam.components, self._components)):
+        component_mix: Tuple[bool, bool, bool] = tuple(a and b for a, b in zip(beam.components, self._components))
+
+        if not any(component_mix):
             return ()
 
-        
+        left_strength = beam.left.strength - beam.left.length
+        right_strength = beam.right.strength - beam.right.length
+
+        left_pos = beam.left.source + beam.left.direction * beam.left.length
+        right_pos = beam.right.source + beam.right.direction * beam.right.length
+
+        left_edge = LightEdge(
+            beam.left.direction,
+            left_pos,
+            left_strength,
+            left_strength,
+            beam.left.bound
+        )
+
+        right_edge = LightEdge(
+            beam.right.direction,
+            right_pos,
+            right_strength,
+            right_strength,
+            beam.right.bound
+        )
+
+        origin = (left_pos + right_pos) / 2
+        direction = beam.direction
+
+        next_beam = LightBeam(
+            beam.image,
+            component_mix,
+            left_edge,
+            right_edge,
+            origin,
+            direction,
+            None
+        )
+
+        beam.add_child(next_beam)
+
+        return (next_beam,)
 
 
 class LightConcave(LightInteractor):

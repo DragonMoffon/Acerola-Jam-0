@@ -39,9 +39,6 @@ class App(Window):
         self.dispatch_event('on_update', delta_time)
 
     def on_update(self, delta_time: float):
-        t = tuple(self._light_scene_test.interactor_manager._active_interactors)[0]
-        t.set_direction(t.direction.rotate(delta_time * 3.14159 * 0.05))
-
         p = self._light_scene_test._projectors[0]
         p.set_direction(p.direction.rotate((2*self._test_dir - 1) * delta_time * 3.14159 * 0.05))
 

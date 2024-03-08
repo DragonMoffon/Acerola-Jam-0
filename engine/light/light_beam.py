@@ -1,8 +1,8 @@
-from typing import Tuple, List, Dict, Set, TYPE_CHECKING
+from typing import Tuple, List, Dict, Set, TYPE_CHECKING, Optional
 from math import pi
 
 from pyglet.math import Vec2
-from arcade import Texture, draw_point, draw_polygon_outline, draw_line
+from arcade import Texture, draw_point, draw_polygon_outline, draw_line, draw_polygon_filled
 
 if TYPE_CHECKING:
     from engine.light.light_interactors import LightInteractorManager, LightInteractor
@@ -93,7 +93,8 @@ class LightBeam:
                  right: LightEdge,
                  origin: Vec2,
                  direction: Vec2,
-                 intersection: Vec2 | None = None
+                 intersection: Vec2 | None = None,
+                 parent: Optional["LightBeam"] = None
                  ):
         # The texture which will be projected once the beam reaches the end
         self._image: Texture = image
@@ -110,12 +111,19 @@ class LightBeam:
         # The direction is the "normal" of the face of the beam. It does not respect the angles of the beam edges.
         self._direction: Vec2 = direction
         # The intersection of the two edges. If the two edges are parallel this is None.
-        self._intersection: Vec2 | None = intersection
+        self._intersection: Vec2 | None = intersection or _get_intersection(
+            left.source, left.direction, right.source, right.direction)
 
         # When a light beam hits an intractable object it splits into multiple child beams
         # Starting from a projector it is possible get to all sub beams.
         # Unused.
         self._children: Tuple[LightBeam, ...] = ()
+
+    def add_child(self, child: "LightBeam"):
+        if child in self._children:
+            return
+
+        self._children = self._children + (child,)
 
     @property
     def origin(self):
@@ -145,6 +153,18 @@ class LightBeam:
     @property
     def components(self):
         return self._components
+
+    @property
+    def image(self):
+        return self._image
+
+    @property
+    def image_cropped(self):
+        if self._image is None:
+            return None
+        y = int(self._image.height * self._right_edge.bound)
+        height = int(self._image.height * (self._left_edge.bound - self._right_edge.bound))
+        return self._image.crop(0, y, self._image.width, height)
 
     def propagate_beam(self):
         pass
@@ -238,22 +258,13 @@ class LightBeam:
         end_right = self._right_edge.source + self._right_edge.direction * self._right_edge.length
 
         draw_polygon_outline((start_left, end_left, end_right, start_right), colour, 1)
-
-        draw_point(self._origin.x + self._direction.x * 20, self._origin.y + self._direction.y * 20,
-                   (0, 255, 255, 255), 5)
-
-        draw_point(
-            self._right_edge.source.x + self._right_edge.normal.x * 10,
-            self._right_edge.source.y + self._right_edge.normal.y * 10,
-            (255, 0, 0, 255),
-            3
-        )
-        draw_point(
-            self._left_edge.source.x + self._left_edge.normal.x * 10,
-            self._left_edge.source.y + self._left_edge.normal.y * 10,
-            (0, 255, 0, 255),
-            3
-        )
+        draw_polygon_filled(
+            (start_left, end_left, end_right, start_right),
+            (colour[0], colour[1], colour[2], 125)
+                            )
+        draw_point(self._origin.x, self._origin.y, (255, 255, 0, 255), 10)
+        for child in self._children:
+            child.debug_draw()
 
 
 class LightBeamParent:
@@ -278,19 +289,9 @@ class LightBeamParent:
 
         self._children: Tuple[LightBeam, ...] = ()
 
-        self._test_lines: List[Tuple[Vec2, Vec2]] = []
-
     def debug_draw(self):
         for child in self._children:
             child.debug_draw()
-
-        return
-        for line in self._test_lines:
-            draw_point(line[0].x, line[0].y, (0, 255, 0, 255), 2)
-            draw_point(line[2].x, line[2].y, (255, 0, 255, 255), 2)
-            #draw_line(line[0].x, line[0].y,
-            #          line[2].x, line[2].y,
-            #          (255, 0, 255, 255), 1)
 
     def set_direction(self, new_direction: Vec2):
         if new_direction == self._direction:
@@ -335,7 +336,6 @@ class LightBeamParent:
 
         _intersecting_edges = self._interaction_manager.calculate_intersecting_edges(_initial_beam)
 
-        self._test_lines = []
         if not _intersecting_edges:
             self._children = (_initial_beam,)
             return
@@ -375,7 +375,6 @@ class LightBeamParent:
 
                 ray_dict[end] = (intersect_start, p_d, intersect_end)
 
-        self._test_lines = list(ray_dict.values())
         _sorted_points = sorted(ray_dict.keys(), key=lambda p: self._normal.dot((ray_dict[p][0] - _initial_beam.right.source)))
 
         # The finished beams which will replace the initial beam
@@ -400,7 +399,7 @@ class LightBeamParent:
             start_idx, end_idx = edge_dict[point]
 
             portion = (point_origin - _initial_beam.right.source).mag / self._width
-            strength = (point_end - point_end).mag
+            strength = (point_end - point_origin).mag
             bound = _initial_beam.right.bound + portion * (_initial_beam.left.bound - _initial_beam.right.bound)
 
             closing_edge = None
@@ -561,8 +560,8 @@ class LightBeamParent:
         for beam, edge in pass_through_beams:
             if edge[3] is None:
                 continue
-            edge[3].calculate_interaction(beam, edge)
-        self._children = tuple(beam for beam, _ in pass_through_beams) + tuple(extension_beams)
+            extension_beams.extend(edge[3].calculate_interaction(beam, edge))
+        self._children = tuple(beam for beam, _ in pass_through_beams)
 
     def propagate_kill(self):
         # Safely remove all child beams
