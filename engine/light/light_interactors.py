@@ -22,7 +22,7 @@ class LightInteractorManager:
                 start, end, normal = interactor.get_edge_adjusted(i)
                 is_intersecting = beam.is_edge_in_beam(start, end)
                 if is_intersecting:
-                    intersecting_edges.append((start, end, Vec2(-normal.y, normal.x), interactor))
+                    intersecting_edges.append((start, end, Vec2(normal.y, -normal.x), interactor))
 
         return tuple(intersecting_edges)
 
@@ -58,8 +58,11 @@ class LightInteractor:
                  position: Vec2,
                  direction: Vec2,
                  bounding_points: Tuple[Vec2, ...],
+                 parent: LightInteractorManager,
                  components: Tuple[bool, bool, bool] = (True, True, True)
                  ):
+        self._parent: LightInteractorManager = parent
+
         self._position: Vec2 = position
         self._direction: Vec2 = direction
         # The bounds should be stored clockwise and be relative to the center position
@@ -173,6 +176,7 @@ class LightFilter(LightInteractor):
                  direction: Vec2,
                  width: float,
                  height: float,
+                 parent: LightInteractorManager,
                  components: Tuple[bool, bool, bool] = (True, True, True)
                  ):
         bounds = (
@@ -181,7 +185,7 @@ class LightFilter(LightInteractor):
             Vec2(width/2, height/2),
             Vec2(width/2, -height/2)
         )
-        super().__init__(position, direction, bounds, components)
+        super().__init__(position, direction, bounds, parent, components)
 
     def calculate_interaction(self, beam: LightBeam, edge: Tuple[Vec2, Vec2, Vec2, "LightInteractor"]) -> Tuple[LightBeam, ...]:
         component_mix: Tuple[bool, bool, bool] = tuple(a and b for a, b in zip(beam.components, self._components))
@@ -217,6 +221,7 @@ class LightFilter(LightInteractor):
         next_beam = LightBeam(
             beam.image,
             component_mix,
+            self._parent,
             left_edge,
             right_edge,
             origin,
@@ -226,7 +231,7 @@ class LightFilter(LightInteractor):
 
         beam.add_child(next_beam)
 
-        return (next_beam,)
+        return next_beam,
 
 
 class LightConcave(LightInteractor):

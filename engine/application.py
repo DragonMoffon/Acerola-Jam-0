@@ -19,7 +19,8 @@ class App(Window):
 
     def __init__(self):
         self.clock = Clock()
-        super().__init__(width=APP_WIDTH, height=APP_HEIGHT, title="Ace's Chroma Chaos")
+        super().__init__(width=APP_WIDTH, height=APP_HEIGHT, title="Ace's Chroma Chaos",
+                         vsync=False)
         self._base_upscale_buffer: UpscaleBuffer = UpscaleBuffer(DOWNSCALE_WIDTH, DOWNSCALE_HEIGHT)
         self._base_camera: Camera2D = Camera2D(
             position=(0.0, 0.0),
@@ -30,6 +31,7 @@ class App(Window):
         self._light_scene_test: LightScene = generate_test_scene()
 
         self._test_dir = 1
+        self._test_t = 0.0
 
     def on_key_press(self, symbol: int, modifiers: int):
         self._test_dir = 1 - self._test_dir
@@ -39,8 +41,16 @@ class App(Window):
         self.dispatch_event('on_update', delta_time)
 
     def on_update(self, delta_time: float):
+        # print(1/delta_time)
+        # t = tuple(self._light_scene_test.interactor_manager._active_interactors)[0]
+        # t.set_direction(t.direction.rotate(delta_time * 3.14159 * 0.05))
+
         p = self._light_scene_test._projectors[0]
         p.set_direction(p.direction.rotate((2*self._test_dir - 1) * delta_time * 3.14159 * 0.05))
+
+        self._test_t += delta_time
+        if self._test_t > 0.5:
+            p.turn_on()
 
     def on_draw(self):
         self.clear()

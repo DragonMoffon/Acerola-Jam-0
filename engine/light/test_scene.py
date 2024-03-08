@@ -34,8 +34,8 @@ def generate_test_scene() -> LightScene:
 
     interactor_manager = LightInteractorManager()
 
-    light_filter = LightFilter(Vec2(75, 75), Vec2(1.0, 0.0), 30, 100, (False, True, False))
-    light_filter_2 = LightFilter(Vec2(120, 30), Vec2(0.0,1.0), 20, 40, (False, False, True))
+    light_filter = LightFilter(Vec2(75, 75), Vec2(1.0, 0.0), 30, 100, interactor_manager, (False, True, False))
+    light_filter_2 = LightFilter(Vec2(120, 30), Vec2(0.0,1.0), 20, 40, interactor_manager, (False, False, True))
     interactor_manager.add_interactor(light_filter)
     interactor_manager.add_interactor(light_filter_2)
 
@@ -46,6 +46,5 @@ def generate_test_scene() -> LightScene:
     )
 
     projector.set_parent(scene)
-    projector.turn_on()
 
     return scene

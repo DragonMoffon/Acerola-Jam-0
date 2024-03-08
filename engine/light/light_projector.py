@@ -4,7 +4,7 @@ from math import pi
 from pyglet.math import Vec2
 from arcade import Texture, draw_polygon_outline, draw_line
 
-from engine.light.light_beam import LightBeamParent
+from engine.light.light_beam import LightBeam, LightEdge
 
 if TYPE_CHECKING:
     from engine.light.light_scene import LightScene
@@ -22,24 +22,25 @@ class LightProjector:
         self._origin: Vec2 = origin
         self._direction: Vec2 = direction
 
-        self._light_beam: LightBeamParent | None = None
+        self._children_beams: Tuple[LightBeam, ...] = ()
 
         self._parent: "LightScene" | None = None
         self._is_on: bool = False
 
+    def update_beams(self):
+        for child_beam in self._children_beams:
+            child_beam.propagate_kill()
+
+        initial_beam = self.generate_initial_beam()
+        self._children_beams = initial_beam.propagate_beam(self._parent.interactor_manager)
+
     def set_parent(self, parent: "LightScene"):
         self._parent = parent
 
-        if self._light_beam is None:
-            self._light_beam = LightBeamParent(
-                parent.interactor_manager,
-                self._image,
-                self._components,
-                self._origin,
-                self._direction,
-                LightProjector.output_width,
-                self._strength
-            )
+        if not self._is_on:
+            return
+
+        self.update_beams()
 
     def turn_on(self):
         self._is_on = True
@@ -47,27 +48,18 @@ class LightProjector:
         if self._parent is None:
             return
 
-        if self._light_beam is None:
-            self._light_beam = LightBeamParent(
-                self._parent.interactor_manager,
-                self._image,
-                self._origin,
-                self._direction,
-                LightProjector.output_width,
-                self._strength
-            )
-
-        self._light_beam.propagate_beam()
+        self.update_beams()
 
     def turn_off(self):
         self._is_on = False
 
-        if self._light_beam is not None:
-            self._light_beam.propagate_kill()
+        for child_beam in self._children_beams:
+            child_beam.propagate_kill()
+        self._children_beams = ()
 
     @property
-    def light_beam(self):
-        return self._light_beam
+    def children_beams(self) -> Tuple[LightBeam, ...]:
+        return self._children_beams
 
     @property
     def direction(self):
@@ -76,7 +68,10 @@ class LightProjector:
     def set_direction(self, new_direction: Vec2):
         self._direction = new_direction
 
-        self.light_beam.set_direction(new_direction)
+        if not self._is_on or self._parent is None:
+            return
+
+        self.update_beams()
 
     @property
     def origin(self):
@@ -85,7 +80,10 @@ class LightProjector:
     def set_origin(self, new_origin: Vec2):
         self._origin = new_origin
 
-        self._light_beam.set_origin(new_origin)
+        if not self._is_on or self._parent is None:
+            return
+
+        self.update_beams()
 
     def debug_draw(self):
         r = Vec2(-self._direction.y, self._direction.x)
@@ -106,4 +104,39 @@ class LightProjector:
             1
         )
 
-        self._light_beam.debug_draw()
+        for child_beam in self._children_beams:
+            child_beam.debug_draw()
+
+    def generate_initial_beam(self):
+        if self._parent is None:
+            raise ValueError()
+
+        h_width = LightProjector.output_width // 2
+        h_img_height = self._image.height // 2
+        rotated_dir = self._direction.rotate(pi / 2).normalize()
+
+        image_location = self._origin + self._direction * self._strength
+        image_left_location = image_location + rotated_dir * h_img_height
+        image_right_location = image_location - rotated_dir * h_img_height
+
+        proj_left_location = self._origin + rotated_dir * h_width
+        proj_right_location = self._origin - rotated_dir * h_width
+
+        left_dir = (image_left_location - proj_left_location).normalize()
+        left_strength = (image_left_location - proj_left_location).mag
+
+        right_dir = (image_right_location - proj_right_location).normalize()
+        right_strength = (image_right_location - proj_right_location).mag
+
+        left_edge = LightEdge(left_dir, proj_left_location, left_strength, left_strength, 1.0)
+        right_edge = LightEdge(right_dir, proj_right_location, right_strength, right_strength, 0.0)
+
+        return LightBeam(
+            self._image,
+            self._components,
+            self._parent.interactor_manager,
+            left_edge,
+            right_edge,
+            self._origin,
+            self._direction
+        )
