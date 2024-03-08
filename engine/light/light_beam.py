@@ -183,14 +183,12 @@ class LightBeam:
         height = int(self._image.height * (self._left_edge.bound - self._right_edge.bound))
         return self._image.crop(0, y, self._image.width, height)
 
-    def propagate_beam(self, interaction_manager: "LightInteractorManager", depth: int = 0) -> Tuple["LightBeam", ...]:
-        print("¬¬¬¬", depth)
+    def propagate_beam(self, interaction_manager: "LightInteractorManager") -> Tuple["LightBeam", ...]:
         self.propagate_kill()
 
         _intersecting_edges = interaction_manager.calculate_intersecting_edges(self)
 
         if not _intersecting_edges:
-            print("¦¦¦¦", depth)
             return self,
 
         left = self.left.sink
@@ -205,8 +203,6 @@ class LightBeam:
             (left.x, left.y): (self.left.source, self.left.direction, left),
             (right.x, right.y): (self.right.source, self.right.direction, right)
         }
-        print("pre-calc ray data")
-        print(ray_dict)
         for i in range(len(_intersecting_edges)):
             edge = _intersecting_edges[i]
             start = (edge[0].x, edge[0].y)
@@ -239,11 +235,6 @@ class LightBeam:
         _sorted_points = sorted(ray_dict.keys(),
                                 key=lambda p: self._normal.dot((ray_dict[p][0] - self.right.source)))
 
-        if len(_sorted_points) == 2:
-            print("Hmmmm")
-
-        print(tuple((p, self._normal.dot(ray_dict[p][0] - self.right.source)) for p in _sorted_points))
-
         # The finished beams which will replace the initial beam
         pass_through_beams: List[Tuple[LightBeam, Tuple[Vec2, Vec2, Vec2, "LightInteractor"]]] = list()
         # The current right edge. Since we sweep from right to left
@@ -256,9 +247,7 @@ class LightBeam:
         # The nearest edge. Using the intersection method we determine the closest edge at each point.
         # When the nearest edge ends we have to do a check through the active edges to find the next closest.
         nearest_edge: Tuple[Vec2, Vec2, Vec2, "LightInteractor"] | None = None
-        print("Start Intersection Sweep")
         for point in _sorted_points:
-            print(point)
             left_edge: LightEdge | None = None
             next_right_edge: LightEdge | None = None
 
@@ -312,11 +301,9 @@ class LightBeam:
             if closing_edge is not None:
                 active_edges.pop((id(closing_edge[0]), id(closing_edge[1])))
 
-            print(starting_edge, closing_edge)
 
             # We only want to start / end beams when the point is actually closer
             if point_length ** 2 <= edge_dist or (nearest_edge is not None and closing_edge == nearest_edge):
-                print("start", point_length ** 2, edge_dist)
                 # If an edge has finished and started then we are at a corner
                 if closing_edge is not None and starting_edge is not None:
                     nearest_edge = starting_edge
@@ -404,7 +391,6 @@ class LightBeam:
                         next_right_edge = left_edge
             else:
                 if point == (right.x, right.y):
-                    print("€€€")
                     right_edge = LightEdge(
                         point_origin,
                         edge_intersection,
@@ -413,10 +399,7 @@ class LightBeam:
                         (edge_intersection - point_origin).mag,
                         bound
                     )
-                    print(edge_intersection)
                 elif point_vec == left:
-                    print("£££")
-                    print(edge_intersection)
                     left_edge = LightEdge(
                         point_origin,
                         edge_intersection,
@@ -427,7 +410,6 @@ class LightBeam:
                     )
 
             if right_edge is not None and left_edge is not None:
-                print("make beam")
                 # make a new beam and start over.
                 beam = LightBeam(
                     self._image,
@@ -448,21 +430,13 @@ class LightBeam:
             # Since we have hit the left point we can stop creating new beams.
             if point_vec == left:
                 break
-        print("Start Recursion Step")
-        print(pass_through_beams)
         for beam, edge in pass_through_beams:
             if edge[3] is None:
-                print("skipped", beam)
                 continue
-            print("next beam")
             child_beams = edge[3].calculate_interaction(beam, edge)
-            print("children:", child_beams)
             for child in child_beams:
-                print("check child")
-                final_beams = child.propagate_beam(interaction_manager, depth + 1)
-                print("True Children:", final_beams)
+                final_beams = child.propagate_beam(interaction_manager)
                 beam.extend_children(final_beams)
-        print("¦¦¦¦", depth)
         return tuple(beam for beam, _ in pass_through_beams)
 
     def propagate_kill(self):

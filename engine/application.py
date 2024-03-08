@@ -20,7 +20,7 @@ class App(Window):
     def __init__(self):
         self.clock = Clock()
         super().__init__(width=APP_WIDTH, height=APP_HEIGHT, title="Ace's Chroma Chaos",
-                         vsync=False)
+                         vsync=False, update_rate=1/5000)
         self._base_upscale_buffer: UpscaleBuffer = UpscaleBuffer(DOWNSCALE_WIDTH, DOWNSCALE_HEIGHT)
         self._base_camera: Camera2D = Camera2D(
             position=(0.0, 0.0),
@@ -41,10 +41,10 @@ class App(Window):
         self.dispatch_event('on_update', delta_time)
 
     def on_update(self, delta_time: float):
-        # print(1/delta_time)
-        # t = tuple(self._light_scene_test.interactor_manager._active_interactors)[0]
-        # t.set_direction(t.direction.rotate(delta_time * 3.14159 * 0.05))
-        print("\n\n\n\n\n")
+        print(1/delta_time)
+        t = tuple(self._light_scene_test.interactor_manager._active_interactors)[0]
+        t.set_direction(t.direction.rotate(delta_time * 3.14159 * 0.05))
+
         p = self._light_scene_test._projectors[0]
         p.set_direction(p.direction.rotate((2*self._test_dir - 1) * delta_time * 3.14159 * 0.01))
 
