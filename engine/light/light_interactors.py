@@ -3,6 +3,8 @@ from math import pi
 from weakref import WeakSet
 
 from pyglet.math import Vec2
+
+import arcade
 from arcade import draw_line, draw_polygon_outline
 
 from engine.light.light_beam import LightBeam, LightEdge
@@ -20,10 +22,16 @@ class LightInteractorManager:
         for interactor in tuple(self._active_interactors):
             for i in range(len(interactor.bounds)):
                 start, end, normal = interactor.get_edge_adjusted(i)
+                if any((
+                        beam.left.source == start, beam.left.source == end,
+                        beam.right.source == start, beam.right.source == end,
+                        )):
+                    continue
+
                 is_intersecting = beam.is_edge_in_beam(start, end)
+
                 if is_intersecting:
                     intersecting_edges.append((start, end, Vec2(normal.y, -normal.x), interactor))
-
         return tuple(intersecting_edges)
 
     def add_interactor(self, interactor: "LightInteractor", is_active: bool = True):
@@ -82,6 +90,12 @@ class LightInteractor:
         # softly disappears from here.
         self._incoming_beams: WeakSet = WeakSet()
         self._outgoing_beams: WeakSet = WeakSet()
+
+    def __str__(self):
+        return f"Interactor<{self._position=}, {self._direction=}, {self._components=}>"
+
+    def __repr__(self):
+        return self.__str__()
 
     def remove_incoming_beam(self, beam: LightBeam):
         if beam not in self._incoming_beams:
@@ -168,6 +182,15 @@ class LightInteractor:
 
         draw_polygon_outline(points, colour, 1)
 
+        normals = tuple(self.normals_adjusted)
+        for i in range(len(normals)):
+            arcade.draw_line(
+                points[i].x, points[i].y,
+                points[i].x + normals[i].x * 10,
+                points[i].y + normals[i].y * 10,
+                (255, 0, 0, 255)
+            )
+
 
 class LightFilter(LightInteractor):
 
@@ -177,8 +200,7 @@ class LightFilter(LightInteractor):
                  width: float,
                  height: float,
                  parent: LightInteractorManager,
-                 components: Tuple[bool, bool, bool] = (True, True, True)
-                 ):
+                 components: Tuple[bool, bool, bool] = (True, True, True)):
         bounds = (
             Vec2(-width/2, -height/2),
             Vec2(-width/2, height/2),
@@ -196,27 +218,29 @@ class LightFilter(LightInteractor):
         left_strength = beam.left.strength - beam.left.length
         right_strength = beam.right.strength - beam.right.length
 
-        left_pos = beam.left.source + beam.left.direction * beam.left.length
-        right_pos = beam.right.source + beam.right.direction * beam.right.length
+        left_pos = beam.left.sink
+        right_pos = beam.right.sink
 
         left_edge = LightEdge(
-            beam.left.direction,
             left_pos,
+            left_pos + beam.left.direction * left_strength,
+            beam.left.direction,
             left_strength,
             left_strength,
             beam.left.bound
         )
 
         right_edge = LightEdge(
-            beam.right.direction,
             right_pos,
+            right_pos + beam.right.direction * right_strength,
+            beam.right.direction,
             right_strength,
             right_strength,
             beam.right.bound
         )
 
         origin = (left_pos + right_pos) / 2
-        direction = beam.direction
+        direction = Vec2(edge[2].y, -edge[2].x)
 
         next_beam = LightBeam(
             beam.image,
@@ -226,10 +250,9 @@ class LightFilter(LightInteractor):
             right_edge,
             origin,
             direction,
-            None
+            None,
+            edge[2]
         )
-
-        beam.add_child(next_beam)
 
         return next_beam,
 

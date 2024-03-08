@@ -128,8 +128,22 @@ class LightProjector:
         right_dir = (image_right_location - proj_right_location).normalize()
         right_strength = (image_right_location - proj_right_location).mag
 
-        left_edge = LightEdge(left_dir, proj_left_location, left_strength, left_strength, 1.0)
-        right_edge = LightEdge(right_dir, proj_right_location, right_strength, right_strength, 0.0)
+        left_edge = LightEdge(
+            proj_left_location,
+            image_left_location,
+            left_dir,
+            left_strength,
+            left_strength,
+            1.0
+        )
+        right_edge = LightEdge(
+            proj_right_location,
+            image_right_location,
+            right_dir,
+            right_strength,
+            right_strength,
+            0.0
+        )
 
         return LightBeam(
             self._image,
