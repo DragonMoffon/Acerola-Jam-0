@@ -25,6 +25,8 @@ class LightInteractorManager:
                 if any((
                         beam.left.source == start, beam.left.source == end,
                         beam.right.source == start, beam.right.source == end,
+                        start.x == beam.origin.x == end.x,
+                        start.y == beam.origin.y == end.y
                         )):
                     continue
 

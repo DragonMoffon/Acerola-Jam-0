@@ -127,7 +127,7 @@ class LightBeam:
         self._children: Tuple[LightBeam, ...] = ()
 
     def __str__(self):
-        return f"Beam<{self.origin=}, {self.direction=}, {self.right.source=}, {self.right.sink=}, {self._components=}>"
+        return f"Beam<{self.origin=}, {self.direction=}, {self.right.source=}, {self.right.sink=}, {self.left.source=}, {self.left.sink=}, {self._components=}>"
 
     def __repr__(self):
         return self.__str__()
@@ -451,7 +451,6 @@ class LightBeam:
         print("Start Recursion Step")
         print(pass_through_beams)
         for beam, edge in pass_through_beams:
-            print(beam._children)
             if edge[3] is None:
                 print("skipped", beam)
                 continue
@@ -463,7 +462,6 @@ class LightBeam:
                 final_beams = child.propagate_beam(interaction_manager, depth + 1)
                 print("True Children:", final_beams)
                 beam.extend_children(final_beams)
-                print(beam._children)
         print("¦¦¦¦", depth)
         return tuple(beam for beam, _ in pass_through_beams)
 
