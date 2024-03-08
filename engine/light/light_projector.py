@@ -88,7 +88,7 @@ class LightProjector:
         self._light_beam.set_origin(new_origin)
 
     def debug_draw(self):
-        r = self._direction.rotate(pi / 2)
+        r = Vec2(-self._direction.y, self._direction.x)
         p = (
             self._origin + r * (LightProjector.output_width / 2),
             self._origin - r * (LightProjector.output_width / 2),

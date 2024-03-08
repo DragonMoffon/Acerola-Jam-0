@@ -22,7 +22,7 @@ class LightInteractorManager:
                 start, end, normal = interactor.get_edge_adjusted(i)
                 is_intersecting = beam.is_edge_in_beam(start, end)
                 if is_intersecting:
-                    intersecting_edges.append((start, end, normal.rotate(-pi / 2).normalize(), interactor))
+                    intersecting_edges.append((start, end, Vec2(-normal.y, normal.x), interactor))
 
         return tuple(intersecting_edges)
 

@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 def _get_intersection(o1: Vec2, d1: Vec2, o2: Vec2, d2: Vec2) -> Vec2 | None:
     # If the two directions are parallel then just return None as they won't intersect
-
     dot = d1.dot(d2)
     if 1 <= dot or dot <= -1:
         return None
@@ -110,6 +109,7 @@ class LightBeam:
         self._origin: Vec2 = origin
         # The direction is the "normal" of the face of the beam. It does not respect the angles of the beam edges.
         self._direction: Vec2 = direction
+        self._normal: Vec2 = Vec2(-direction.y, direction.x)
         # The intersection of the two edges. If the two edges are parallel this is None.
         self._intersection: Vec2 | None = intersection or _get_intersection(
             left.source, left.direction, right.source, right.direction)
@@ -166,8 +166,242 @@ class LightBeam:
         height = int(self._image.height * (self._left_edge.bound - self._right_edge.bound))
         return self._image.crop(0, y, self._image.width, height)
 
-    def propagate_beam(self):
-        pass
+    def propagate_beam(self) -> Tuple["LightBeam", ...]:
+        return
+        self.propagate_kill()
+
+        _intersecting_edges = self._interaction_manager.calculate_intersecting_edges(self)
+
+        if not _intersecting_edges:
+            return self,
+
+        right = self.right.source + self.right.direction * self.right.length
+        left = self.left.source + self.left.direction * self.left.length
+        end_dir = (left - right).normalize()
+
+        _intersecting_edges = _intersecting_edges + ((right, left, end_dir, None),)
+
+        edge_dict: Dict[Tuple[float, float], Tuple[int | None, int | None]] = dict()
+        ray_dict: Dict[Tuple[float, float], Tuple[Vec2, Vec2, Vec2]] = dict()
+        for i in range(len(_intersecting_edges)):
+            edge = _intersecting_edges[i]
+            start = (edge[0].x, edge[0].y)
+            end = (edge[1].x, edge[1].y)
+
+            s = edge_dict.get(start, (None, None))
+            e = edge_dict.get(end, (None, None))
+
+            edge_dict[start] = (i, s[1])
+            edge_dict[end] = (e[0], i)
+
+            if start not in ray_dict:
+                p_d = self.right.direction if self.intersection is None else (
+                            edge[0] - self.intersection).normalize()
+                intersect_start = _get_intersection(self.right.source, self._normal, edge[0], p_d)
+                p_d = (edge[0] - intersect_start).normalize()
+                intersect_end = _get_intersection(right, end_dir, edge[0], p_d)
+
+                ray_dict[start] = (intersect_start, p_d, intersect_end)
+
+            if end not in ray_dict:
+                p_d = self.right.direction if self.intersection is None else (
+                            edge[1] - self.intersection).normalize()
+                intersect_start = _get_intersection(self.right.source, self._normal, edge[1], p_d)
+                p_d = (edge[1] - intersect_start).normalize()
+                intersect_end = _get_intersection(right, end_dir, edge[1], p_d)
+
+                ray_dict[end] = (intersect_start, p_d, intersect_end)
+
+        _sorted_points = sorted(ray_dict.keys(),
+                                key=lambda p: self._normal.dot((ray_dict[p][0] - self.right.source)))
+
+        # The finished beams which will replace the initial beam
+        pass_through_beams: List[Tuple[LightBeam, Tuple[Vec2, Vec2, Vec2, "LightInteractor"]]] = list()
+        # The current right edge. Since we sweep from right to left
+        # we only need to record this edge the left are created on the fly.
+        right_edge: LightEdge | None = None
+
+        # The active edge is a set of all non terminated edges. Will generally always contain the back edge.
+        active_edges: Dict[Tuple[int, int], Tuple[Vec2, Vec2, Vec2, "LightInteractor"]] = dict()
+
+        # The nearest edge. Using the intersection method we determine the closest edge at each point.
+        # When the nearest edge ends we have to do a check through the active edges to find the next closest.
+        nearest_edge: Tuple[Vec2, Vec2, Vec2, "LightInteractor"] | None = None
+        for point in _sorted_points:
+            left_edge: LightEdge | None = None
+            next_right_edge: LightEdge | None = None
+
+            point_vec = Vec2(*point)
+            point_origin, point_dir, point_end = ray_dict[point]
+            point_length = (point_origin - point_vec).mag
+            start_idx, end_idx = edge_dict[point]
+
+            portion = (point_origin - self.right.source).mag / self._width
+            strength = (point_end - point_origin).mag
+            bound = self.right.bound + portion * (self.left.bound - self.right.bound)
+
+            closing_edge = None
+            starting_edge = None
+
+            last_edge = nearest_edge
+            edge_intersection = None
+            edge_dist = float("inf")
+            if nearest_edge is not None:
+                edge_intersection = _get_intersection(
+                    point_origin, point_dir,
+                    nearest_edge[0], nearest_edge[2]
+                )
+                edge_dist = edge_intersection.dot(edge_intersection)
+
+            start_edge = None if start_idx is None else _intersecting_edges[start_idx]
+            end_edge = None if end_idx is None else _intersecting_edges[end_idx]
+
+            if start_edge is not None and ((Vec2(-start_edge[2].y, start_edge[2].x).dot(point_dir) < 0.0) or (
+                    start_edge == _intersecting_edges[-1])):
+                if (id(start_edge[0]), id(start_edge[1])) in active_edges:
+                    closing_edge = start_edge
+                else:
+                    starting_edge = start_edge
+
+            if end_edge is not None and ((Vec2(-end_edge[2].y, end_edge[2].x).dot(point_dir) < 0.0) or (
+                    end_edge == _intersecting_edges[-1])):
+                if (id(end_edge[0]), id(end_edge[1])) in active_edges:
+                    closing_edge = end_edge
+                else:
+                    starting_edge = end_edge
+
+            if starting_edge is not None:
+                active_edges[(id(starting_edge[0]), id(starting_edge[1]))] = starting_edge
+
+            if closing_edge is not None:
+                active_edges.pop((id(closing_edge[0]), id(closing_edge[1])))
+
+            # We only want to start / end beams when the point is actually closer
+            if point_length ** 2 <= edge_dist or closing_edge == nearest_edge:
+                # If an edge has finished and started then we are at a corner
+                if closing_edge is not None and starting_edge is not None:
+                    nearest_edge = starting_edge
+                    left_edge = LightEdge(
+                        point_dir,
+                        point_origin,
+                        strength,
+                        point_length,
+                        bound
+                    )
+                    next_right_edge = left_edge
+
+                # If an edge finished without another starting we need to look for the next closest edge
+                elif closing_edge is not None:
+                    if point_vec == left:
+                        left_edge = self.left
+                    else:
+                        left_edge = LightEdge(
+                            point_dir,
+                            point_origin,
+                            strength,
+                            point_length,
+                            bound
+                        )
+
+                        closest_edge = None
+                        intersection_point = None
+                        edge_dist = None
+                        for edge in active_edges.values():
+                            intersection = _get_intersection(
+                                point_origin, point_dir,
+                                edge[0], edge[2]
+                            )
+                            intersection_rel = intersection - point_origin
+
+                            if (closest_edge is None) or (intersection_rel.dot(intersection_rel) < edge_dist):
+                                closest_edge = edge
+                                edge_dist = intersection_rel.dot(intersection_rel)
+                                intersection_point = intersection
+
+                        if closest_edge:
+                            nearest_edge = closest_edge
+                            next_right_edge = LightEdge(
+                                point_dir,
+                                point_origin,
+                                strength,
+                                (intersection_point - point_origin).mag,
+                                bound
+                            )
+
+                # if a closer edge just started without the previous closing we need to change the nearest edge
+                elif starting_edge is not None:
+                    nearest_edge = starting_edge
+                    if point_vec == right:
+                        right_edge = self.right
+                    elif edge_intersection is not None:
+                        left_edge = LightEdge(
+                            point_dir,
+                            point_origin,
+                            strength,
+                            (edge_intersection - point_origin).mag,
+                            bound
+                        )
+                        next_right_edge = LightEdge(
+                            point_dir,
+                            point_origin,
+                            strength,
+                            point_length,
+                            bound
+                        )
+                    else:
+                        left_edge = LightEdge(
+                            point_dir,
+                            point_origin,
+                            strength,
+                            point_length,
+                            bound
+                        )
+                        next_right_edge = left_edge
+            else:
+                if point == (right.x, right.y):
+                    right_edge = LightEdge(
+                        point_dir,
+                        point_origin,
+                        strength,
+                        (edge_intersection - point_origin).mag,
+                        bound
+                    )
+                elif point_vec == left:
+                    left_edge = LightEdge(
+                        point_dir,
+                        point_origin,
+                        strength,
+                        (edge_intersection - point_origin).mag,
+                        bound
+                    )
+
+            if right_edge is not None and left_edge is not None:
+                # make a new beam and start over.
+                beam = LightBeam(
+                    self._image,
+                    self._components,
+                    left_edge,
+                    right_edge,
+                    (left_edge.source + right_edge.source) / 2,
+                    self._direction,
+                    _get_intersection(left_edge.source, left_edge.direction, right_edge.source, right_edge.direction)
+                )
+
+                pass_through_beams.append((beam, last_edge))
+
+                if next_right_edge is not None:
+                    right_edge = next_right_edge
+
+            # Since we have hit the left point we can stop creating new beams.
+            if point_vec == left:
+                break
+
+        extension_beams: List[LightBeam] = []
+        for beam, edge in pass_through_beams:
+            if edge[3] is None:
+                continue
+            extension_beams.extend(edge[3].calculate_interaction(beam, edge))
+        self._children = tuple(beam for beam, _ in pass_through_beams)
 
     def propagate_kill(self):
         pass
@@ -262,7 +496,7 @@ class LightBeam:
             (start_left, end_left, end_right, start_right),
             (colour[0], colour[1], colour[2], 125)
                             )
-        draw_point(self._origin.x, self._origin.y, (255, 255, 0, 255), 10)
+        # draw_point(self._origin.x, self._origin.y, (255, 255, 0, 255), 10)
         for child in self._children:
             child.debug_draw()
 
