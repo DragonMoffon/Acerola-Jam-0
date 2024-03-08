@@ -29,16 +29,21 @@ class App(Window):
 
         self._light_scene_test: LightScene = generate_test_scene()
 
+        self._test_dir = 1
+
+    def on_key_press(self, symbol: int, modifiers: int):
+        self._test_dir = 1 - self._test_dir
+
     def _dispatch_updates(self, delta_time: float):
         self.clock.tick(delta_time)
         self.dispatch_event('on_update', delta_time)
 
     def on_update(self, delta_time: float):
-        #t = tuple(self._light_scene_test.interactor_manager._active_interactors)[0]
-        #t.set_direction(t.direction.rotate(delta_time * 3.14159 * 0.05))
+        t = tuple(self._light_scene_test.interactor_manager._active_interactors)[0]
+        t.set_direction(t.direction.rotate(delta_time * 3.14159 * 0.05))
 
         p = self._light_scene_test._projectors[0]
-        p.set_direction(p.direction.rotate(delta_time * 3.14159 * 0.15))
+        p.set_direction(p.direction.rotate((2*self._test_dir - 1) * delta_time * 3.14159 * 0.05))
 
     def on_draw(self):
         self.clear()

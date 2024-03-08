@@ -21,9 +21,8 @@ class LightInteractorManager:
             for i in range(len(interactor.bounds)):
                 start, end, normal = interactor.get_edge_adjusted(i)
                 is_intersecting = beam.is_edge_in_beam(start, end)
-                is_facing_beam = beam.direction.dot(normal) < 0.0
-                if is_intersecting and is_facing_beam:
-                    intersecting_edges.append((start, end, normal, interactor))
+                if is_intersecting:
+                    intersecting_edges.append((start, end, normal.rotate(-pi / 2).normalize(), interactor))
 
         return tuple(intersecting_edges)
 
@@ -55,7 +54,12 @@ class LightInteractorManager:
 
 class LightInteractor:
 
-    def __init__(self, position: Vec2, direction: Vec2, bounding_points: Tuple[Vec2, ...]):
+    def __init__(self,
+                 position: Vec2,
+                 direction: Vec2,
+                 bounding_points: Tuple[Vec2, ...],
+                 components: Tuple[bool, bool, bool] = (True, True, True)
+                 ):
         self._position: Vec2 = position
         self._direction: Vec2 = direction
         # The bounds should be stored clockwise and be relative to the center position
@@ -65,6 +69,8 @@ class LightInteractor:
             (self._bounds[(i + 1) % len(self._bounds)] - self._bounds[i]).rotate(pi / 2).normalize()
             for i in range(len(self._bounds))
         )
+
+        self._components = components
 
         # Weakly reference the beams coming and going from the light interactor.
         # When the interactor changes the outgoing beams can all be killed,
@@ -116,17 +122,27 @@ class LightInteractor:
     def normals_adjusted(self):
         return (normal.rotate(self._direction.heading) for normal in self._normals)
 
+    @property
+    def components(self):
+        return self._components
+
+    def set_components(self, new_components: Tuple[bool, bool, bool]):
+        if new_components == self._components:
+            return
+
+        self._components = new_components
+
     def get_edge(self, index: int):
         return self._bounds[index], self._bounds[(index + 1) % len(self._bounds)], self._normals[index]
 
-    def get_edge_adjusted(self, index: int):
+    def get_edge_adjusted(self, index: int) -> Tuple[Vec2, Vec2, Vec2]:
         start = self.position + self._bounds[index].rotate(self.direction.heading)
         end = self.position + self._bounds[(index + 1) % len(self._bounds)].rotate(self.direction.heading)
         normal = self._normals[index].rotate(self.direction.heading)
 
         return start, end, normal
 
-    def calculate_interaction(self, beam: LightBeam) -> Tuple[LightBeam, ...]:
+    def calculate_interaction(self, beam: LightBeam, edge: Tuple[Vec2, Vec2, Vec2, "LightInteractor"]) -> Tuple[LightBeam, ...]:
         """
         Calculate the subsequent beams of light caused by the source beam interacting with
         the interactor.
@@ -171,8 +187,11 @@ class LightFilter(LightInteractor):
         )
         super().__init__(position, direction, bounds)
 
-    def calculate_interaction(self, beam: LightBeam) -> Tuple[LightBeam, ...]:
-        pass
+    def calculate_interaction(self, beam: LightBeam, edge: Tuple[Vec2, Vec2, Vec2, "LightInteractor"]) -> Tuple[LightBeam, ...]:
+        if not any(a == b for a, b in zip(beam.components, self._components)):
+            return ()
+
+        
 
 
 class LightConcave(LightInteractor):
