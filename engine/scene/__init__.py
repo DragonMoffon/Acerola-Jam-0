@@ -13,6 +13,8 @@ def load_from_file(target_name: Path):
 class LevelScene:
 
     def __init__(self, do_auto_instantiate: bool = False):
+        self._name: str
+
         self._instantiated: bool = do_auto_instantiate
 
     def instantiate_level(self):

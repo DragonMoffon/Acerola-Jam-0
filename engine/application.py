@@ -6,6 +6,8 @@ from engine.upscale_buffer import UpscaleBuffer
 from engine.light.light_scene import LightScene
 from engine.light.test_scene import generate_test_scene
 
+from engine.views import EditorView, GameView, MenuView, SplashView
+
 from pyglet.math import Vec2
 
 APP_WIDTH: int = 800
@@ -16,6 +18,27 @@ DOWNSCALE_HEIGHT: int = APP_HEIGHT // 2
 
 
 class App(Window):
+
+    def __init__(self):
+        super().__init__(width=APP_WIDTH, height=APP_HEIGHT, title="Ace's Chroma Chaos",
+                         vsync=False, update_rate=1/5000)
+        self.clock: Clock = Clock()
+
+        self._editor_view: EditorView
+        self._game_view: GameView
+        self._menu_view: MenuView
+
+        splash_view: SplashView
+
+    @property
+    def clock(self):
+        return
+
+    def _dispatch_updates(self, delta_time: float):
+        self.clock.tick(delta_time)
+        self.dispatch_event('on_update', delta_time)
+
+class App_OLD(Window):
 
     def __init__(self):
         self.clock = Clock()
@@ -58,5 +81,5 @@ class App(Window):
 
 
 def launch_window():
-    app = App()
+    app = App_OLD()
     app.run()

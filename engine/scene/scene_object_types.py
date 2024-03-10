@@ -2,7 +2,8 @@ from typing import Tuple, Set, Callable, Dict
 from weakref import WeakSet
 from pyglet.math import Vec2
 
-from arcade import draw_polygon_outline, draw_point
+from arcade import draw_polygon_outline, draw_point, SpatialHash
+from arcade.hitbox import HitBox
 
 
 class SceneObject:
@@ -14,6 +15,8 @@ class SceneObject:
         self._components: Tuple[bool, bool, bool] = components
 
         self._children: Set[SceneObject] = set()
+
+        self._collision_bounds: Tuple[HitBox] = ()
 
     def __str__(self):
         return f"SceneObj<{self._origin}, {self._direction}, {self._components}>"
@@ -131,6 +134,26 @@ class SceneObject:
     def is_blue(self):
         return self._components[2]
 
+
+class SceneObjectRenderer:
+
+    def __init__(self, target: SceneObject, active: bool = True):
+        self._target: SceneObject = target
+        self._raw_update_function: Callable = self._target.propagate_update
+
+        self._active: bool = active
+        self._dirty: bool = False
+
+        self._target.propagate_update = self._wrap_update_function(self._raw_update_function)
+        print(self._target.propagate_update)
+    
+    def _wrap_update_function(self, callable: Callable):
+        def _trigger_redraw(*args, **kwargs):
+            pass
+
+            callable(*args, **kwargs)
+
+        return _trigger_redraw
 
 class SceneLight(SceneObject):
 
