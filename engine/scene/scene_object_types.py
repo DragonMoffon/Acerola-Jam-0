@@ -1,8 +1,8 @@
-from typing import Tuple, Set
+from typing import Tuple, Set, Callable, Dict
 from weakref import WeakSet
 from pyglet.math import Vec2
 
-from arcade import draw_polygon_outline,
+from arcade import draw_polygon_outline, draw_point
 
 
 class SceneObject:
@@ -234,6 +234,39 @@ class LightInteractor(SceneObject):
 
     def debug_draw(self):
         _p = self.get_edges_adjusted()
-        _n = self.get_normals_adjusted()
 
-        draw_polygon_outline(_p, ())
+        draw_polygon_outline(_p, self.get_colour(), 1)
+        draw_point(self._origin.x, self._origin.y, self.get_colour(), 2)
+
+
+class PlayerInteractor(SceneObject):
+
+    def __init__(self, origin: Vec2, direction: Vec2,
+                 interaction_callback: Callable,
+                 interaction_kwargs: Dict,
+                 interaction_state: Dict,
+                 components: Tuple[bool, bool, bool]
+                 ):
+        super().__init__(origin, direction, components)
+        self._callback: Callable = interaction_callback
+        self._kwargs: Dict = interaction_kwargs
+        self._state: Dict = interaction_state
+
+        self._interacting: bool = False
+
+    def begin_interaction(self):
+        raise NotImplementedError()
+
+    def end_interaction(self):
+        raise NotImplementedError()
+
+    def propagate_update(self):
+        raise NotImplementedError()
+
+    def kill(self):
+        raise NotImplementedError()
+
+    def debug_draw(self):
+        draw_point(self._origin.x, self._origin.y, self.get_colour(), 4)
+
+
