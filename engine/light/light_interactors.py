@@ -193,7 +193,6 @@ class LightInteractor:
                 (255, 0, 0, 255)
             )
 
-
 class LightFilter(LightInteractor):
 
     def __init__(self,

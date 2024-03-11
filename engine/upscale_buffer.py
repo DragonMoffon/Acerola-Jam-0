@@ -35,6 +35,12 @@ class UpscaleBuffer:
         finally:
             prev_fbo.use()
 
+    def use(self):
+        self._buffer.use()
+
+    def clear(self):
+        self._buffer.clear()
+
     @property
     def texture(self):
         return self._texture

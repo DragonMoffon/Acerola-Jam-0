@@ -1,20 +1,16 @@
-from arcade import Window, Sprite, SpriteList
+from typing import Optional, Tuple
+
+from arcade import Window
 from arcade.experimental.clock.clock import Clock
 from arcade.camera import Camera2D
+from arcade.types import RGBA255OrNormalized
 
 from engine.upscale_buffer import UpscaleBuffer
 from engine.light.light_scene import LightScene
 from engine.light.test_scene import generate_test_scene
 
 from engine.views import EditorView, GameView, MenuView, SplashView
-
-from pyglet.math import Vec2
-
-APP_WIDTH: int = 800
-APP_HEIGHT: int = 600
-
-DOWNSCALE_WIDTH: int = APP_WIDTH // 2
-DOWNSCALE_HEIGHT: int = APP_HEIGHT // 2
+from engine.data import APP_WIDTH, APP_HEIGHT, DOWNSCALE_WIDTH, DOWNSCALE_HEIGHT
 
 
 class App(Window):
@@ -22,21 +18,63 @@ class App(Window):
     def __init__(self):
         super().__init__(width=APP_WIDTH, height=APP_HEIGHT, title="Ace's Chroma Chaos",
                          vsync=False, update_rate=1/5000)
-        self.clock: Clock = Clock()
+        self._base_upscale_buffer: UpscaleBuffer = UpscaleBuffer(DOWNSCALE_WIDTH, DOWNSCALE_HEIGHT)
+        self._base_camera: Camera2D = Camera2D(
+            position=(0.0, 0.0),
+            viewport=(0, 0, DOWNSCALE_WIDTH, DOWNSCALE_HEIGHT),
+            projection=(-DOWNSCALE_WIDTH//2, DOWNSCALE_WIDTH//2, -DOWNSCALE_HEIGHT//2, DOWNSCALE_HEIGHT//2)
+        )
+        self._base_upscale_buffer.use()
+        self._base_camera.use()
+
+        self._clock: Clock = Clock()
 
         self._editor_view: EditorView
-        self._game_view: GameView
+        self._game_view: GameView = GameView()
         self._menu_view: MenuView
 
         splash_view: SplashView
 
+        self.show_view(self._game_view)
+
+
+    @property
+    def upscale_buffer(self) -> UpscaleBuffer:
+        return self._base_upscale_buffer
+
+    @property
+    def base_camera(self) -> Camera2D:
+        return self._base_camera
+
     @property
     def clock(self):
-        return
+        return self._clock
 
     def _dispatch_updates(self, delta_time: float):
         self.clock.tick(delta_time)
         self.dispatch_event('on_update', delta_time)
+
+    def on_update(self, delta_time: float):
+        from math import pi, sin, cos, floor
+        self._base_camera.position = (cos(self._clock.elapsed * 0.5 * pi) * 30, sin(self._clock.elapsed * 0.5 * pi) * 30)
+
+    def clear(
+            self,
+            color: Optional[RGBA255OrNormalized] = None,
+            normalized: bool = False,
+            viewport: Optional[Tuple[int, int, int, int]] = None,
+    ):
+        color = color if color is not None else self.background_color
+        self.ctx.screen.clear(color, normalized=normalized, viewport=viewport)
+        self._base_upscale_buffer.clear()
+
+    def on_draw(self):
+        with self.ctx.screen.activate() as fbo:
+            fbo.clear()
+            self._base_upscale_buffer.draw()
+
+        self._base_camera.use()
+
 
 class App_OLD(Window):
 
@@ -81,5 +119,5 @@ class App_OLD(Window):
 
 
 def launch_window():
-    app = App_OLD()
+    app = App()
     app.run()

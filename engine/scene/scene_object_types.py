@@ -2,13 +2,14 @@ from typing import Tuple, Set, Callable, Dict
 from weakref import WeakSet
 from pyglet.math import Vec2
 
-from arcade import draw_polygon_outline, draw_point, SpatialHash
+from arcade import draw_polygon_outline, draw_point
 from arcade.hitbox import HitBox
 
 
 class SceneObject:
 
-    def __init__(self, origin: Vec2, direction: Vec2, components: Tuple[bool, bool, bool]):
+    def __init__(self, origin: Vec2, direction: Vec2, components: Tuple[bool, bool, bool],
+                 collision_bounds: Tuple[HitBox, ...] = None):
         self._origin: Vec2 = origin
         self._direction: Vec2 = direction
         self._normal: Vec2 = Vec2(-direction.y, direction.x)
@@ -16,7 +17,7 @@ class SceneObject:
 
         self._children: Set[SceneObject] = set()
 
-        self._collision_bounds: Tuple[HitBox] = ()
+        self._collision_bounds: Tuple[HitBox] = collision_bounds or tuple()
 
     def __str__(self):
         return f"SceneObj<{self._origin}, {self._direction}, {self._components}>"
@@ -33,6 +34,12 @@ class SceneObject:
                 other.direction == self._direction and
                 other.components == self._components
         )
+
+    def decompose(self) -> Tuple["SceneObject", ...]:
+        raise NotImplementedError()
+
+    def compose(self, sub_objects: Tuple["SceneObject", ...]) ->"SceneObject":
+        raise NotImplementedError()
 
     def set_origin(self, new_origin: Vec2):
         if new_origin == self._origin:
@@ -74,11 +81,11 @@ class SceneObject:
         raise NotImplementedError()
 
     def propagate_kill(self):
-        self.kill()
-
         for child in tuple(self._children):
             child.propagate_kill()
         self._children.clear()
+
+        self.kill()
 
     def debug_draw(self):
         ...
@@ -138,28 +145,82 @@ class SceneObject:
 class SceneObjectRenderer:
 
     def __init__(self, target: SceneObject, active: bool = True):
+        if type(target.propagate_update) is classmethod:
+            raise ValueError("Scene Object already has a Renderer")
+
         self._target: SceneObject = target
-        self._raw_update_function: Callable = self._target.propagate_update
+        self._raw_update_function: Callable = target.propagate_update
+        self._raw_kill_function: Callable = target.kill
 
         self._active: bool = active
         self._dirty: bool = False
 
-        self._target.propagate_update = self._wrap_update_function(self._raw_update_function)
-        print(self._target.propagate_update)
-    
-    def _wrap_update_function(self, callable: Callable):
-        def _trigger_redraw(*args, **kwargs):
-            pass
+        if self._active:
+            self._target.propagate_update = self._wrap_update_function(self._raw_update_function)
+            self._target.kill = self._wrap_kill_function(self._raw_kill_function)
 
-            callable(*args, **kwargs)
+    def _wrap_update_function(self, callable: Callable):
+        @classmethod
+        def _trigger_redraw(cls, *args, **kwargs):
+            callable(cls, *args, **kwargs)
+            self._dirty = True
 
         return _trigger_redraw
+
+    def _wrap_kill_function(self, callable: Callable):
+        @classmethod
+        def _trigger_cleanup(*args, **kwargs):
+            callable(*args, **kwargs)
+            self.kill()
+
+        return _trigger_cleanup
+
+    def activate(self):
+        if not self._active:
+            self._dirty = True
+
+            self._target.propagate_update = self._wrap_update_function(self._raw_update_function)
+            self._target.kill = self._wrap_kill_function(self._raw_kill_function)
+
+        self._active = True
+
+    def deactivate(self):
+        if self._active:
+            self._dirty = True
+
+            self._target.propagate_update = self._raw_update_function
+            self._target.kill = self._raw_kill_function
+
+        self._active = False
+
+    def kill(self):
+        self.deactivate()
+
+        self._target = None
+        self._raw_update_function = None
+        self._raw_kill_function = None
+
+    def _redraw(self):
+        raise NotImplementedError()
+
+    def _render(self):
+        raise NotImplementedError()
+
+    def draw(self):
+        pass
+
 
 class SceneLight(SceneObject):
 
     def __init__(self, origin: Vec2, direction: Vec2, strength: float, components: Tuple[bool, bool, bool]):
         super().__init__(origin, direction, components)
         self._strength: float = strength
+
+    def decompose(self):
+        raise NotImplementedError()
+
+    def compose(self, sub_objects: Tuple["SceneObject", ...]):
+        raise NotImplementedError()
 
     def propagate_update(self):
         raise NotImplementedError()
@@ -186,6 +247,12 @@ class LightInteractor(SceneObject):
 
         self._ingoing_light: WeakSet[SceneLight] = WeakSet()
         self._outgoing_light: WeakSet[SceneLight] = WeakSet()
+
+    def decompose(self):
+        raise NotImplementedError()
+
+    def compose(self, sub_objects: Tuple["SceneObject", ...]):
+        raise NotImplementedError()
 
     def remove_ingoing_light(self, light: SceneLight):
         self._ingoing_light.discard(light)
@@ -276,6 +343,12 @@ class PlayerInteractor(SceneObject):
         self._state: Dict = interaction_state
 
         self._interacting: bool = False
+
+    def decompose(self):
+        raise NotImplementedError()
+
+    def compose(self, sub_objects: Tuple["SceneObject", ...]):
+        raise NotImplementedError()
 
     def begin_interaction(self):
         raise NotImplementedError()
