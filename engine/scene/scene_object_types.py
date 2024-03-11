@@ -93,6 +93,30 @@ class SceneObject:
     def get_colour(self, _alpha: int = 255):
         return 255*self._components[0], 255*self._components[1], 255*self._components[2], _alpha
 
+    def set_red(self, is_red: bool):
+        if is_red == self.is_red:
+            return
+
+        self._components = is_red, self.is_green, self.is_blue
+
+        self.propagate_update()
+
+    def set_green(self, is_green: bool):
+        if is_green == self.is_green:
+            return
+
+        self._components = self.is_red, is_green, self.is_blue
+
+        self.propagate_update()
+
+    def set_blue(self, is_blue: bool):
+        if is_blue == self.is_blue:
+            return
+
+        self._components = self.is_red, self.is_green, is_blue
+
+        self.propagate_update()
+
     @property
     def origin(self):
         return self._origin
@@ -216,10 +240,10 @@ class SceneLight(SceneObject):
         super().__init__(origin, direction, components)
         self._strength: float = strength
 
-    def decompose(self):
+    def decompose(self) -> Tuple["SceneObject", ...]:
         raise NotImplementedError()
 
-    def compose(self, sub_objects: Tuple["SceneObject", ...]):
+    def compose(self, sub_objects: Tuple["SceneObject", ...]) -> "SceneObject":
         raise NotImplementedError()
 
     def propagate_update(self):
@@ -248,10 +272,10 @@ class LightInteractor(SceneObject):
         self._ingoing_light: WeakSet[SceneLight] = WeakSet()
         self._outgoing_light: WeakSet[SceneLight] = WeakSet()
 
-    def decompose(self):
+    def decompose(self) -> Tuple["SceneObject", ...]:
         raise NotImplementedError()
 
-    def compose(self, sub_objects: Tuple["SceneObject", ...]):
+    def compose(self, sub_objects: Tuple["SceneObject", ...]) -> "SceneObject":
         raise NotImplementedError()
 
     def remove_ingoing_light(self, light: SceneLight):
@@ -333,21 +357,17 @@ class PlayerInteractor(SceneObject):
 
     def __init__(self, origin: Vec2, direction: Vec2,
                  interaction_callback: Callable,
-                 interaction_kwargs: Dict,
-                 interaction_state: Dict,
                  components: Tuple[bool, bool, bool]
                  ):
         super().__init__(origin, direction, components)
         self._callback: Callable = interaction_callback
-        self._kwargs: Dict = interaction_kwargs
-        self._state: Dict = interaction_state
 
         self._interacting: bool = False
 
-    def decompose(self):
+    def decompose(self) -> Tuple["SceneObject", ...]:
         raise NotImplementedError()
 
-    def compose(self, sub_objects: Tuple["SceneObject", ...]):
+    def compose(self, sub_objects: Tuple["SceneObject", ...]) -> "SceneObject":
         raise NotImplementedError()
 
     def begin_interaction(self):
