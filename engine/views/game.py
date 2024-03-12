@@ -1,14 +1,18 @@
-from arcade import View, SpriteSolidColor
-from arcade.experimental.background import Background
+from arcade import View
 
-from engine.data import DOWNSCALE_WIDTH, DOWNSCALE_HEIGHT
-from engine.get_window import get_window
+from engine.scene import LevelDirector
 
 
 class GameView(View):
 
     def __init__(self):
         super().__init__()
+
+        self._director: LevelDirector = LevelDirector()
+
+    @property
+    def level_director(self) -> LevelDirector:
+        return self._director
 
     def on_draw(self):
         self.clear()

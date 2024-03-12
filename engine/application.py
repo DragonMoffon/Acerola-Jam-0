@@ -12,6 +12,8 @@ from engine.light.test_scene import generate_test_scene
 from engine.views import EditorView, GameView, MenuView, SplashView
 from engine.data import APP_WIDTH, APP_HEIGHT, DOWNSCALE_WIDTH, DOWNSCALE_HEIGHT
 
+from engine.scene.scene_object_types import SimpleObject
+from pyglet.math import Vec2
 
 class App(Window):
 
@@ -36,7 +38,6 @@ class App(Window):
         splash_view: SplashView
 
         self.show_view(self._game_view)
-
 
     @property
     def upscale_buffer(self) -> UpscaleBuffer:

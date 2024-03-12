@@ -2,14 +2,14 @@ from typing import Tuple, Set, Callable, Dict
 from weakref import WeakSet
 from pyglet.math import Vec2
 
-from arcade import draw_polygon_outline, draw_point
+from arcade import draw_polygon_outline, draw_point, draw_line
 from arcade.hitbox import HitBox
 
 
 class SceneObject:
 
     def __init__(self, origin: Vec2, direction: Vec2, components: Tuple[bool, bool, bool],
-                 collision_bounds: Tuple[HitBox, ...] = None):
+                 collision_bounds: Tuple[HitBox, ...] | None = None, string_id: str | None = None ):
         self._origin: Vec2 = origin
         self._direction: Vec2 = direction
         self._normal: Vec2 = Vec2(-direction.y, direction.x)
@@ -17,10 +17,11 @@ class SceneObject:
 
         self._children: Set[SceneObject] = set()
 
-        self._collision_bounds: Tuple[HitBox] = collision_bounds or tuple()
+        self._collision_bounds: Tuple[HitBox, ...] = collision_bounds or tuple()
+        self._string_id: str = string_id or str(id(self))
 
     def __str__(self):
-        return f"SceneObj<{self._origin}, {self._direction}, {self._components}>"
+        return f"[{self._string_id}]={type(self)}<{self._origin}, {self._direction}, {self._components}>"
 
     def __repr__(self):
         return self.__str__()
@@ -35,11 +36,20 @@ class SceneObject:
                 other.components == self._components
         )
 
+    @property
+    def id(self):
+        return self._string_id
+
+    @property
+    def collisions_bounds(self):
+        return self._collision_bounds
+
     def decompose(self) -> Tuple["SceneObject", ...]:
         raise NotImplementedError()
 
-    def compose(self, sub_objects: Tuple["SceneObject", ...]) ->"SceneObject":
-        raise NotImplementedError()
+    @staticmethod
+    def compose(origins: Tuple["SceneObject", ...]) -> "SceneObject":
+        raise NotImplementedError
 
     def set_origin(self, new_origin: Vec2):
         if new_origin == self._origin:
@@ -88,7 +98,15 @@ class SceneObject:
         self.kill()
 
     def debug_draw(self):
-        ...
+        c = self.get_colour()
+        draw_point(self._origin.x, self._origin.y, c, 4)
+        draw_line(
+            self._origin.x, self._origin.y,
+            self._origin.x + self._direction.x * 10,
+            self._origin.y + self._direction.y * 10,
+            c,
+            1
+        )
 
     def get_colour(self, _alpha: int = 255):
         return 255*self._components[0], 255*self._components[1], 255*self._components[2], _alpha
@@ -166,6 +184,35 @@ class SceneObject:
         return self._components[2]
 
 
+class SimpleObject(SceneObject):
+
+    def decompose(self):
+        colours = (
+            (True, False, False),
+            (False, True, False),
+            (False, False, True)
+        )
+
+        return tuple(SimpleObject(self._origin, self._direction, colours[c]) for c in range(3) if self._components[c])
+
+    @staticmethod
+    def compose(origins: Tuple["SimpleObject", ...]) -> "SimpleObject":
+        if len(origins) == 0:
+            raise ValueError("Must have atleast one element to compose a new scene object")
+
+        first = origins[0]
+        comp = tuple(any(rgb) for rgb in zip(origin.components for origin in origins))
+        print(comp)
+        return SimpleObject(first.origin, first.direction, comp, first.collisions_bounds, first.id)
+
+    def propagate_update(self):
+        for child in self._children:
+            child.propagate_update()
+
+    def kill(self):
+        pass
+
+
 class SceneObjectRenderer:
 
     def __init__(self, target: SceneObject, active: bool = True):
@@ -175,6 +222,7 @@ class SceneObjectRenderer:
         self._target: SceneObject = target
         self._raw_update_function: Callable = target.propagate_update
         self._raw_kill_function: Callable = target.kill
+        self._raw_decompose_function: Callable = target.decompose
 
         self._active: bool = active
         self._dirty: bool = False
@@ -182,19 +230,29 @@ class SceneObjectRenderer:
         if self._active:
             self._target.propagate_update = self._wrap_update_function(self._raw_update_function)
             self._target.kill = self._wrap_kill_function(self._raw_kill_function)
+            self._target.decompose = self._wrap_decompose_function(self._raw_decompose_function)
 
-    def _wrap_update_function(self, callable: Callable):
+    def _wrap_decompose_function(self, func: Callable):
+        @classmethod
+        def _trigger_decompose(cls, *args, **kwargs):
+            decomp = func(cls, *args, **kwargs)
+            self.decompose(decomp)
+            return decomp
+
+        return _trigger_decompose
+
+    def _wrap_update_function(self, func: Callable):
         @classmethod
         def _trigger_redraw(cls, *args, **kwargs):
-            callable(cls, *args, **kwargs)
+            func(cls, *args, **kwargs)
             self._dirty = True
 
         return _trigger_redraw
 
-    def _wrap_kill_function(self, callable: Callable):
+    def _wrap_kill_function(self, func: Callable):
         @classmethod
         def _trigger_cleanup(*args, **kwargs):
-            callable(*args, **kwargs)
+            func(*args, **kwargs)
             self.kill()
 
         return _trigger_cleanup
@@ -205,6 +263,7 @@ class SceneObjectRenderer:
 
             self._target.propagate_update = self._wrap_update_function(self._raw_update_function)
             self._target.kill = self._wrap_kill_function(self._raw_kill_function)
+            self._target.decompose = self._wrap_decompose_function(self._raw_decompose_function)
 
         self._active = True
 
@@ -214,6 +273,7 @@ class SceneObjectRenderer:
 
             self._target.propagate_update = self._raw_update_function
             self._target.kill = self._raw_kill_function
+            self._target.decompose = self._raw_decompose_function
 
         self._active = False
 
@@ -223,6 +283,10 @@ class SceneObjectRenderer:
         self._target = None
         self._raw_update_function = None
         self._raw_kill_function = None
+        self._raw_decompose_function = None
+
+    def decompose(self, decomp: Tuple[SceneObject, ...]):
+        raise NotImplementedError()
 
     def _redraw(self):
         raise NotImplementedError()
@@ -241,9 +305,6 @@ class SceneLight(SceneObject):
         self._strength: float = strength
 
     def decompose(self) -> Tuple["SceneObject", ...]:
-        raise NotImplementedError()
-
-    def compose(self, sub_objects: Tuple["SceneObject", ...]) -> "SceneObject":
         raise NotImplementedError()
 
     def propagate_update(self):
@@ -273,9 +334,6 @@ class LightInteractor(SceneObject):
         self._outgoing_light: WeakSet[SceneLight] = WeakSet()
 
     def decompose(self) -> Tuple["SceneObject", ...]:
-        raise NotImplementedError()
-
-    def compose(self, sub_objects: Tuple["SceneObject", ...]) -> "SceneObject":
         raise NotImplementedError()
 
     def remove_ingoing_light(self, light: SceneLight):
@@ -367,9 +425,6 @@ class PlayerInteractor(SceneObject):
     def decompose(self) -> Tuple["SceneObject", ...]:
         raise NotImplementedError()
 
-    def compose(self, sub_objects: Tuple["SceneObject", ...]) -> "SceneObject":
-        raise NotImplementedError()
-
     def begin_interaction(self):
         raise NotImplementedError()
 
@@ -384,5 +439,4 @@ class PlayerInteractor(SceneObject):
 
     def debug_draw(self):
         draw_point(self._origin.x, self._origin.y, self.get_colour(), 4)
-
 
